@@ -1,0 +1,41 @@
+# Pre-commit hooks for queueing-tool.
+#
+# One-time setup (installs both the pre-commit and commit-msg hook stages):
+#
+#     pre-commit install --install-hooks
+#
+# Run against all files:
+#
+#     pre-commit run -a
+#
+# See https://github.com/pre-commit/pre-commit
+
+# install both the pre-commit and commit-msg stages on a plain `pre-commit install`
+default_install_hook_types: [pre-commit, commit-msg]
+
+ci:
+  autoupdate_commit_msg: "chore: update pre-commit hooks"
+  autofix_commit_msg: "style: pre-commit fixes"
+
+repos:
+  # Standard hygiene hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: check-symlinks
+      - id: check-yaml
+      - id: debug-statements
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+      - id: trailing-whitespace
+
+  # Conventional commit messages: type(scope): subject
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.1.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+        args: [--force-scope, feat, fix, docs, refactor, test, chore, perf, ci]
