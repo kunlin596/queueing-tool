@@ -26,11 +26,11 @@ def request_id(server_address):
         sock = socket.socket( socket.AF_INET, socket.SOCK_STREAM )
         sock.settimeout(10.0)
         sock.connect(server_address)
-        sock.sendall('get_id'.encode()) 
-        job_id = int( sock.recv(1024).decode()) 
+        sock.sendall('get_id'.encode())
+        job_id = int( sock.recv(1024).decode())
         sock.close()
     except Exception as e:
-        
+
         print('request id: no answer from server')
         exit()
     return job_id
@@ -98,8 +98,7 @@ def main():
             subtask_id = int(args.subtask[1])
             assert subtask_id <= blocks[block_indices[0]].values['subtasks']
             assert subtask_id > 0
-        except Exception as e:
-            print(f"Debug: qsub: Exception occurred: {str(e)}")
+        except Exception:
             print('block ' + args.subtask[0] + ': subtask id must be in the range 1,...,' + str(blocks[block_indices[0]].values['subtasks']) + ' but is ' + args.subtask[1])
             exit()
     elif not args.from_block == '':
@@ -127,4 +126,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

@@ -5,7 +5,7 @@ import argparse
 
 
 def main():
-    
+
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument('--server_ip', type=str, default='localhost', help='ip address of the server')
     arg_parser.add_argument('--server_port', type=int, default=1234, help='port of the server')

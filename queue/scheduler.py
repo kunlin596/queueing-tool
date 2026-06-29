@@ -3,7 +3,7 @@
 import datetime
 
 class Resources(object):
-    
+
     def __init__(self, gpus, threads, memory):
         self.gpus = gpus
         self.threads = threads
@@ -14,7 +14,7 @@ class Resources(object):
 
 
 class SchedulerJob(object):
-    
+
     def __init__(self, job, job_id): # job is a Job object from the server
         self.resources = Resources(job.n_gpus, job.threads, job.memory)
         self.hours = job.hours # estimated duration of the job

@@ -120,9 +120,9 @@ class Server(object):
             job_id = scheduler.schedule(self.jobs, self.waiting_jobs, self.running_jobs)
 
     def send_msg(self, msg, address):
-        try:  # if client can not be reached assume it crashed 
+        try:  # if client can not be reached assume it crashed
 
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM) 
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.connect(address)
             sock.sendall(msg.encode())
             sock.close()
@@ -145,7 +145,7 @@ class Server(object):
                     self.jobs[j].time = datetime.datetime.now() # waiting time starts now
                     self.update_priorities()
 
-    
+
         # remove job from job container
         job = self.jobs.pop(job_id, None)
 
@@ -225,12 +225,12 @@ class Server(object):
                 msg = connection.recv(1024).decode()
 
                 assert msg != ''
-                
+
                 specifier = msg.split(':')[0]
-                to_delete = re.sub('\*', '.*', msg.split(':')[1])
+                to_delete = re.sub(r'\*', '.*', msg.split(':')[1])
                 user = msg.split(':')[2]
 
-                
+
                 joblist = []
                 # find relevant jobs
                 for job_id in self.jobs:
@@ -246,7 +246,7 @@ class Server(object):
                     message = f'no job with {specifier} {to_delete} found'
                     connection.sendall(message.encode())
                     connection.recv(1024).decode()  # wait for acknowledgement by client
-                
+
                 for job_id in sorted(joblist):
                     if (user == 'root') or (user == self.jobs[job_id].user):
 
@@ -261,20 +261,20 @@ class Server(object):
                         message = f'delete job {job_id} ({self.jobs[job_id].name}): permission denied'
                         connection.sendall(message.encode())
                         connection.recv(1024).decode()  # wait for acknowledgement by client
-                
+
                 message = ':'
                 connection.sendall(message.encode())
 
         except Exception as e:
 
             self.schedule()
-            
+
     def handle_connection(self, connection):
         try:
             # receive data
             msg = connection.recv(1024).decode()
 
-            
+
             # handle data
             if (msg[0:7] == 'timeout') and (self.abort_on_time_limit): # timeout
 
@@ -338,5 +338,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-

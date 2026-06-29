@@ -6,7 +6,7 @@ class Block(object):
 
     def __init__(self):
         self.values = dict()
-        self.values['name'] = 'unkown-job'
+        self.values['name'] = 'unknown-job'
         self.values['threads'] = 1
         self.values['memory'] = 1024
         self.values['gpus'] = 0

@@ -6,12 +6,12 @@ import argparse
 
 
 def main():
-    
+
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument('--server_ip', type=str, default='localhost', help='ip address of the server')
     arg_parser.add_argument('--server_port', type=int, default=1234, help='port of the server')
     arg_parser.add_argument('jobs', type=str, nargs='+',
-                            help='Jobs to be deleted. Is a space separated list of job names, user names, or jod ids. For ids, jobs ranges separated by a \'-\' are also possible.')
+                            help='Jobs to be deleted. Is a space separated list of job names, user names, or job ids. For ids, job ranges separated by a \'-\' are also possible.')
     # delete by id (default), name (-n), or user (-u)
     group = arg_parser.add_mutually_exclusive_group()
     group.add_argument('-n', action='store_true', help='Delete all jobs of the given names. Asterisks can be used as wildcards.')
@@ -53,29 +53,29 @@ def main():
         sock.settimeout(10.0)
         sock.connect(server_address)
 
-        
+
         # initial request to delete jobs
         sock.sendall('qdel'.encode())
         initial_reply = sock.recv(1024).decode()
 
-        
+
         for job in joblist:
             message = f"{specifier}:{str(job)}:{user}"
 
             sock.sendall(message.encode())
             reply = sock.recv(1024).decode()
 
-            
+
             while reply != ':' and reply != '':
                 sock.sendall(':'.encode()) # send acknowledgement to server
 
                 print(reply)
                 reply = sock.recv(1024).decode()
 
-        
+
         sock.close()
 
-    except Exception as e:
+    except Exception:
 
         print('qdel: no answer from server')
 
