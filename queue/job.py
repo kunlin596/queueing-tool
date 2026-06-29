@@ -5,7 +5,7 @@ import threading
 import os
 import signal
 import datetime
-import random
+import time
 import argparse
 import socket
 from block_parser import Block_Parser
@@ -91,7 +91,7 @@ class Executable_Job(Job):
 
 
     def finalize(self):
-        # remove temporal script file
+        # remove temporary script file
         try:
             if os.path.isfile(self.tmp_script_file):
                 os.remove(self.tmp_script_file)
@@ -155,14 +155,14 @@ class Executable_Job(Job):
 
     def wait_for_message(self, pid):
         while True:
-            connection, from_address = self.listener.accept()
+            connection, _ = self.listener.accept()
             received = connection.recv(1024).decode()
 
             if (received == 'delete') or (received == 'timeout'):
                 if self.is_running:
 
-                    self.write_log('\nJOB KILLED: %s\n' % received)
-                    os.killpg(os.getpgid(pid), signal.SIGKILL)
+                    self.write_log('\nJOB STOPPED: %s\n' % received)
+                    self.stop_process_group(pid)
                     return
                 else:
                     exit()
@@ -170,6 +170,39 @@ class Executable_Job(Job):
                 connection.close()
                 return received
             connection.close()
+
+
+    def stop_process_group(self, pid, grace_seconds = 120):
+        # ask the job to shut down gracefully (SIGTERM) and only escalate to
+        # SIGKILL if it has not exited after grace_seconds. GPU jobs can take a
+        # while to tear down cleanly (CUDA/NCCL teardown, checkpoint flush,
+        # logger shutdown), so the grace window is deliberately generous; the
+        # loop returns the instant the process group is empty, so a fast exit
+        # is never delayed by it.
+        try:
+            pgid = os.getpgid(pid)
+        except ProcessLookupError:
+            return
+        try:
+            os.killpg(pgid, signal.SIGTERM)
+        except ProcessLookupError:
+            return
+        deadline = time.time() + grace_seconds
+        while time.time() < deadline:
+            try:
+                os.waitpid(pid, os.WNOHANG) # reap the job's shell once it exits
+            except ChildProcessError:
+                pass
+            try:
+                os.killpg(pgid, 0) # probe the group; ProcessLookupError -> empty
+            except ProcessLookupError:
+                return
+            time.sleep(0.2)
+        self.write_log('\nSIGTERM timed out after %ds, sending SIGKILL\n' % grace_seconds)
+        try:
+            os.killpg(pgid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
 
 
     def register(self):
