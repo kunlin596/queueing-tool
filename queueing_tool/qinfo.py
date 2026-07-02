@@ -1,29 +1,34 @@
 #!/usr/bin/python3
 
-import socket
 import argparse
+import socket
 
 
 def main():
 
     arg_parser = argparse.ArgumentParser()
-    arg_parser.add_argument('--server_ip', type=str, default='localhost', help='ip address of the server')
-    arg_parser.add_argument('--server_port', type=int, default=1234, help='port of the server')
+    arg_parser.add_argument(
+        "--server_ip", type=str, default="localhost", help="ip address of the server"
+    )
+    arg_parser.add_argument(
+        "--server_port", type=int, default=1234, help="port of the server"
+    )
     args = arg_parser.parse_args()
 
     server_address = (args.server_ip, args.server_port)
 
     try:
-        sock = socket.socket( socket.AF_INET, socket.SOCK_STREAM )
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(10.0)
         sock.connect(server_address)
-        sock.sendall('qinfo'.encode())
+        sock.sendall(b"qinfo")
         reply = sock.recv(1024).decode()
         sock.close()
         print(reply)
     except Exception:
 
-        print('qinfo: no answer from server')
+        print("qinfo: no answer from server")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

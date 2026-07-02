@@ -1,49 +1,71 @@
 #!/usr/bin/python3
 
-import socket
 import argparse
+import socket
 
 
 def main():
 
     arg_parser = argparse.ArgumentParser()
-    arg_parser.add_argument('--server_ip', type=str, default='localhost', help='ip address of the server')
-    arg_parser.add_argument('--server_port', type=int, default=1234, help='port of the server')
-    arg_parser.add_argument('-v', '--verbose', action='store_true', help='verbose output of qstat')
+    arg_parser.add_argument(
+        "--server_ip", type=str, default="localhost", help="ip address of the server"
+    )
+    arg_parser.add_argument(
+        "--server_port", type=int, default=1234, help="port of the server"
+    )
+    arg_parser.add_argument(
+        "-v", "--verbose", action="store_true", help="verbose output of qstat"
+    )
     args = arg_parser.parse_args()
 
     server_address = (args.server_ip, args.server_port)
-    verbose = 'verbose' if args.verbose else 'quiet'
+    verbose = "verbose" if args.verbose else "quiet"
 
     try:
-        sock = socket.socket( socket.AF_INET, socket.SOCK_STREAM )
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(10.0)
         sock.connect(server_address)
-        sock.sendall(('qstat:' + verbose).encode())
+        sock.sendall(("qstat:" + verbose).encode())
         # print header
         if not args.verbose:
-            print('+----------------------------------------------------------------------------+')
-            print('|id               jobname    submit/start time  status         user  priority|')
-            print('+----------------------------------------------------------------------------+')
+            print(
+                "+----------------------------------------------------------------------------+"
+            )
+            print(
+                "|id               jobname    submit/start time  status         user  priority|"
+            )
+            print(
+                "+----------------------------------------------------------------------------+"
+            )
         else:
-            print('+-----------------------------------------------------------------------------------------------------------------+')
-            print('|id               jobname    submit/start time  status         user  priority  threads    memory  time limit  gpus|')
-            print('+-----------------------------------------------------------------------------------------------------------------+')
+            print(
+                "+-----------------------------------------------------------------------------------------------------------------+"
+            )
+            print(
+                "|id               jobname    submit/start time  status         user  priority  threads    memory  time limit  gpus|"
+            )
+            print(
+                "+-----------------------------------------------------------------------------------------------------------------+"
+            )
         # print jobs
         reply = sock.recv(1024).decode()
-        while not reply == '':
+        while not reply == "":
             print(reply)
-            sock.sendall('ack'.encode()) # send acknowledgement
+            sock.sendall(b"ack")  # send acknowledgement
             reply = sock.recv(1024).decode()
         sock.close()
         # print footer
         if not args.verbose:
-            print('+----------------------------------------------------------------------------+')
+            print(
+                "+----------------------------------------------------------------------------+"
+            )
         else:
-            print('+-----------------------------------------------------------------------------------------------------------------+')
+            print(
+                "+-----------------------------------------------------------------------------------------------------------------+"
+            )
     except:
-        print('qstat: no answer from server')
+        print("qstat: no answer from server")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
