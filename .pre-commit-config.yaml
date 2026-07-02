@@ -32,6 +32,22 @@ repos:
       - id: mixed-line-ending
       - id: trailing-whitespace
 
+  # Python formatting/modernization (the package is stdlib-only Python)
+  - repo: https://github.com/psf/black
+    rev: 25.1.0
+    hooks:
+      - id: black
+  - repo: https://github.com/PyCQA/isort
+    rev: 6.0.1
+    hooks:
+      - id: isort
+        args: [--profile, black]
+  - repo: https://github.com/asottile/pyupgrade
+    rev: v3.20.0
+    hooks:
+      - id: pyupgrade
+        args: [--py38-plus]
+
   # Conventional commit messages: type(scope): subject
   - repo: https://github.com/compilerla/conventional-pre-commit
     rev: v4.1.0
