@@ -1,0 +1,25 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "queueing-tool"
+version = "1.0.0"
+description = "Single-node GPU job queue: block-header scripts, priorities, dependencies"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.8"
+
+[project.scripts]
+qsub = "queueing_tool.qsub:main"
+qstat = "queueing_tool.qstat:main"
+qdel = "queueing_tool.qdel:main"
+qinfo = "queueing_tool.qinfo:main"
+qserver = "queueing_tool.qserver:main"
+qjob = "queueing_tool.job:main"
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["queueing_tool"]

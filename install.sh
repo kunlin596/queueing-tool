@@ -1,6 +1,7 @@
 #!/bin/bash
 
 cp -r queue /usr/
+cp -r queueing_tool /usr/
 cp qserver_daemon /etc/init.d/
 
 sed -i "s|YOUR_QUEUE_PATH|usr/queue|g" /etc/init.d/qserver_daemon

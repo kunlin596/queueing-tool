@@ -8,7 +8,7 @@ import datetime
 import time
 import argparse
 import socket
-from block_parser import Block_Parser
+from queueing_tool.block_parser import Block_Parser
 
 
 ### JOB ###

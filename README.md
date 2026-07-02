@@ -8,8 +8,22 @@ its waiting time.
 
 ## Installation
 
-Open the file `qserver_daemon` and set the available resources `DEVICE_IDS`,
-`THREADS`, and `MEMORY` to values that fit for your machine. Then, install the tool.
+The tool is a Python package (stdlib-only). The recommended install is
+[uv](https://docs.astral.sh/uv/):
+
+```bash
+uv tool install queueing-tool          # from PyPI (when published)
+uv tool install -e ~/dev/src/queueing-tool  # or editable from a checkout
+```
+
+This puts `qsub`, `qstat`, `qdel`, `qinfo`, and `qserver` on your `PATH`
+(`~/.local/bin`). `pipx install` works the same way. The legacy `queue/`
+scripts remain as shims that run the package straight from the checkout —
+no install needed for daemon hosts that already point `PATH` at `queue/`.
+
+To run the scheduler daemon: open the file `qserver_daemon` and set the
+available resources `DEVICE_IDS`, `THREADS`, and `MEMORY` to values that fit
+for your machine. Then install it via `install.sh` (root) or manually below.
 
 ### Automatic
 
