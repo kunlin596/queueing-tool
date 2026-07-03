@@ -1,13 +1,16 @@
 #!/usr/bin/python3
 """qtop — interactive qstat TUI with per-job log streaming.
 
-Two views:
+The LIST view is the qstat table, auto-refreshed. Navigate with arrows /
+j / k, select with Enter (or mouse click) to open the job's log in an
+external viewer chain:
 
-* LIST — the qstat table, auto-refreshed. Navigate with arrows / j / k,
-  select with Enter (or mouse click) to open the job's log.
-* LOG  — live tail of ``q.log/<name>.<id>`` for the selected job, following
-  new output as it arrives. Arrows / PgUp / PgDn scroll back (following
-  pauses), End / G resumes following, Esc / q returns to the list.
+* ``tspin`` (if installed) — zero-config log highlighting on top of less;
+* ``less -R`` — ``+F`` follows a running job live (Ctrl+C pauses into
+  scroll/search mode, ``F`` re-follows), ``+G`` opens finished logs at the
+  end; ``q`` returns to the list;
+* builtin tail view — only when neither tool is installed (arrows /
+  PgUp / PgDn scroll, End / G re-follow, Esc / q back).
 
 Log discovery: every job records its absolute log path in the persistent
 registry ``~/.local/state/queueing-tool/job_logs/<id>`` at submit time (see
@@ -23,7 +26,10 @@ import curses
 import glob
 import os
 import re
+import shutil
+import signal
 import socket
+import subprocess
 from collections import deque
 
 from queueing_tool import job as job_mod
@@ -226,15 +232,63 @@ class QTop:
             self.tail = None
         self.tail_job = row
         self.scroll = None
-        if path is not None and os.path.isfile(path):
-            self.tail = LogTail(path)
-            self.tail.poll()
-            self.mode = self.LOG
-        else:
+        if path is None or not os.path.isfile(path):
             self.error = (
-                f"no q.log/*.{int(row['id']):07d} under {os.getcwd()} or its "
-                "parents (run qtop from inside the submit tree)"
+                f"no tracked log for job {row['id']} and no q.log/*."
+                f"{int(row['id']):07d} under {os.getcwd()} or its parents"
             )
+            return
+        # Chain into an external viewer (tspin -> less -> builtin): tspin
+        # adds zero-config log highlighting on top of less; less -R keeps
+        # ANSI colors, +F follows a running job live (Ctrl+C pauses into
+        # scroll/search mode, F re-follows, q returns to the list), +G
+        # opens a finished log at its end.
+        if self._page_external(path, running=row["status"] == "r"):
+            return
+        # fallback viewer when neither tspin nor less is installed
+        self.tail = LogTail(path)
+        self.tail.poll()
+        self.mode = self.LOG
+
+    @staticmethod
+    def _viewer_cmd(path, running):
+        if shutil.which("tspin") is not None:
+            if running:
+                return ["tspin", "--follow", path]
+            return ["tspin", "--pager", "less -R +G", path]
+        if shutil.which("less") is not None:
+            return ["less", "-R", "+F" if running else "+G", "--", path]
+        return None
+
+    def _page_external(self, path, running):
+        cmd = self._viewer_cmd(path, running)
+        if cmd is None:
+            return False
+        curses.def_prog_mode()
+        curses.endwin()
+        # Ctrl+C is a normal keystroke for less +F (pause following) but is
+        # delivered to the whole foreground process group — ignore it in
+        # qtop while the pager owns the terminal, or qtop dies with it.
+        old_sigint = signal.signal(signal.SIGINT, signal.SIG_IGN)
+        try:
+            subprocess.call(cmd)
+        finally:
+            signal.signal(signal.SIGINT, old_sigint)
+            curses.reset_prog_mode()
+            self._init_screen()
+            self.scr.clear()
+            self.scr.refresh()
+        return True
+
+    def _init_screen(self):
+        curses.curs_set(0)
+        curses.mousemask(
+            curses.BUTTON1_CLICKED
+            | curses.BUTTON1_DOUBLE_CLICKED
+            | curses.BUTTON1_PRESSED
+            | curses.BUTTON1_RELEASED
+        )
+        self.scr.timeout(INPUT_TICK_MS)
 
     def close_log(self):
         if self.tail is not None:
@@ -251,7 +305,7 @@ class QTop:
             scr,
             1,
             0,
-            "[Enter/click] view log   [f] finished logs "
+            "[Enter/click] view log (tspin/less, q returns)   [f] finished logs "
             f"{'ON ' if self.show_finished else 'off'}   [q] quit",
             curses.A_DIM,
         )
@@ -367,14 +421,7 @@ class QTop:
 
     # ------------------------------ loop ------------------------------ #
     def run(self):
-        curses.curs_set(0)
-        curses.mousemask(
-            curses.BUTTON1_CLICKED
-            | curses.BUTTON1_DOUBLE_CLICKED
-            | curses.BUTTON1_PRESSED
-            | curses.BUTTON1_RELEASED
-        )
-        self.scr.timeout(INPUT_TICK_MS)
+        self._init_screen()
         import time
 
         while True:
