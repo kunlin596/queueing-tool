@@ -191,6 +191,39 @@ qstat [-v]
 
 Prints all jobs that are currently submitted. If option `-v` is set, output is verbose, i.e. requested resources per job are also displayed.
 
+#### qtop
+
+```bash
+qtop [--dump]
+```
+
+Interactive qstat TUI with per-job log viewing. The list view shows the
+auto-refreshed job table (arrows/`j`/`k` to highlight, Enter or mouse click
+to select, `f` to also list finished logs, `q` or Ctrl+C to quit). Selecting
+a job opens its log in an external viewer chain and returns to the list on
+`q`:
+
+1. [`tailspin`](https://github.com/bensadeh/tailspin) (`tspin`) — zero-config
+   log highlighting on top of less; follows running jobs live.
+2. `less -R` — `+F` live follow for running jobs (Ctrl+C pauses into
+   scroll/search mode, `F` re-follows), `+G` opens finished logs at the end.
+3. A builtin tail view when neither tool is installed.
+
+Log paths are tracked: every job records its absolute `q.log` path in
+`~/.local/state/queueing-tool/job_logs/<id>` at submission, so qtop works
+from any directory. `--dump` prints the parsed rows and resolved log paths
+for scripting.
+
+**Optional viewer dependencies** (recommended): `less` (usually present) and
+`tailspin` —
+
+```bash
+# static binary, no root needed:
+curl -sL https://github.com/bensadeh/tailspin/releases/latest/download/tailspin-x86_64-unknown-linux-musl.tar.gz \
+  | tar xz -C ~/.local/bin tspin
+# or: cargo install tailspin / brew install tailspin
+```
+
 #### qdel
 
 Delete jobs.

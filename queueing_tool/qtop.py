@@ -472,7 +472,10 @@ def main():
             print(f"error: {error}")
         return
 
-    curses.wrapper(lambda scr: QTop(scr, server_address).run())
+    try:
+        curses.wrapper(lambda scr: QTop(scr, server_address).run())
+    except KeyboardInterrupt:
+        pass  # Ctrl+C in the list view quits cleanly, same as q
 
 
 if __name__ == "__main__":
