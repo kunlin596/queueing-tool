@@ -88,15 +88,20 @@ def log_dirs():
     return dirs
 
 
-def registry_log(job_id):
-    """Look up the job's tracked log path; None if unregistered/missing."""
+def registry_entry(job_id):
+    """The job's tracked log path as registered — file may not exist yet."""
     reg = os.path.join(job_mod.LOG_REGISTRY_DIR, f"{int(job_id):07d}")
     try:
         with open(reg) as f:
-            path = f.read().strip()
+            return f.read().strip() or None
     except OSError:
         return None
-    return path if os.path.isfile(path) else None
+
+
+def registry_log(job_id):
+    """Look up the job's tracked log path; None if unregistered/missing."""
+    path = registry_entry(job_id)
+    return path if path is not None and os.path.isfile(path) else None
 
 
 def registry_paths():
@@ -211,6 +216,25 @@ class QTop:
         self.tail = None
         self.tail_job = None
         self.scroll = None  # None = follow; int = offset from the end
+        self._name_cache = {}  # job id -> full name (from the tracked log)
+
+    def full_name(self, row):
+        """The untruncated job name (the qstat table caps it at 16 chars).
+
+        The tracked log path carries the full name — resolve once per id.
+        """
+        cached = self._name_cache.get(row["id"])
+        if cached is not None:
+            return cached
+        # registry_entry (not registry_log): a waiting job's log does not
+        # exist yet, but its registered path already carries the full name.
+        path = row.get("log_path") or registry_entry(row["id"]) or find_log(row["id"])
+        if path:
+            name = os.path.basename(path).rpartition(".")[0]
+            if name:
+                self._name_cache[row["id"]] = name
+                return name
+        return row["name"]
 
     # ------------------------------ data ------------------------------ #
     def refresh_jobs(self, now):
@@ -310,14 +334,21 @@ class QTop:
             f"{'ON ' if self.show_finished else 'off'}   [q] quit",
             curses.A_DIM,
         )
-        header = " id       name                 submitted            st  user"
+        # Flexible layout: id/submitted/st/user are fixed-width, the name
+        # column absorbs whatever the window has left (min 10 cols).
+        user_w = 11
+        name_w = max(10, width - (1 + 7 + 2 + 2 + 19 + 2 + 2 + 2 + user_w) - 1)
+        header = (
+            f" {'id':<7}  {'name':<{name_w}}  {'submitted':<19}  "
+            f"{'st':<2}  {'user':<{user_w}}"
+        )
         _addstr(scr, 3, 0, header.ljust(width - 1), curses.A_UNDERLINE)
         if not self.jobs:
             _addstr(scr, 5, 1, self.error or "queue is empty", curses.A_DIM)
         for i, row in enumerate(self.jobs):
             line = (
-                f" {row['id']}  {row['name'][:19]:<19}  {row['time']:<19}  "
-                f"{row['status']}   {row['user']}"
+                f" {row['id']}  {self.full_name(row)[:name_w]:<{name_w}}  "
+                f"{row['time']:<19}  {row['status']:<2}  {row['user'][:user_w]:<{user_w}}"
             )
             attr = curses.A_REVERSE if i == self.selected else 0
             if row["status"] == "r":
