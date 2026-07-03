@@ -299,6 +299,7 @@ class QTop:
     # ------------------------------ views ----------------------------- #
     def draw_list(self):
         scr = self.scr
+        width = scr.getmaxyx()[1]
         scr.erase()
         _addstr(scr, 0, 0, "qtop — local queue", curses.A_BOLD)
         _addstr(
@@ -310,7 +311,7 @@ class QTop:
             curses.A_DIM,
         )
         header = " id       name                 submitted            st  user"
-        _addstr(scr, 3, 0, header, curses.A_UNDERLINE)
+        _addstr(scr, 3, 0, header.ljust(width - 1), curses.A_UNDERLINE)
         if not self.jobs:
             _addstr(scr, 5, 1, self.error or "queue is empty", curses.A_DIM)
         for i, row in enumerate(self.jobs):
@@ -321,7 +322,9 @@ class QTop:
             attr = curses.A_REVERSE if i == self.selected else 0
             if row["status"] == "r":
                 attr |= curses.A_BOLD
-            _addstr(scr, 4 + i, 0, line, attr)
+            # pad to the full window width so the selection highlight spans
+            # the entire row, not just the text
+            _addstr(scr, 4 + i, 0, line.ljust(width - 1), attr)
         if self.error and self.jobs:
             _addstr(
                 scr,
@@ -434,7 +437,13 @@ class QTop:
                 self.tail.poll()
                 self.draw_log()
             key = self.scr.getch()
-            if key == -1 or key == curses.KEY_RESIZE:
+            if key == -1:
+                continue
+            if key == curses.KEY_RESIZE:
+                # terminal resized: refresh curses' notion of the size and
+                # force a full repaint; draws re-read getmaxyx() every tick
+                curses.update_lines_cols()
+                self.scr.clear()
                 continue
             alive = (
                 self.handle_key_list(key)
