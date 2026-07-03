@@ -11,6 +11,29 @@ import time
 
 from queueing_tool.block_parser import Block_Parser
 
+# Persistent job-id -> absolute-log-path registry. Jobs write q.log relative
+# to their submit directory, which the server never learns; recording the
+# path here lets qtop (and anything else) resolve a job's log from anywhere.
+LOG_REGISTRY_DIR = os.path.join(
+    os.path.expanduser("~"), ".local", "state", "queueing-tool", "job_logs"
+)
+
+
+def register_log_path(job_id, name):
+    """Record this job's absolute log path under LOG_REGISTRY_DIR/<id>.
+
+    Best-effort: a job must never fail because the registry is unwritable.
+    """
+    try:
+        os.makedirs(LOG_REGISTRY_DIR, exist_ok=True)
+        log_path = os.path.abspath(
+            os.path.join("q.log", name + "." + str(job_id).zfill(7))
+        )
+        with open(os.path.join(LOG_REGISTRY_DIR, str(job_id).zfill(7)), "w") as f:
+            f.write(log_path + "\n")
+    except OSError:
+        pass
+
 
 ### JOB ###
 class Job:
@@ -269,6 +292,8 @@ class Executable_Job(Job):
             print("JOB DECLINED.")
             print(reply)
             exit()
+        # job is officially queued: record where its log will live
+        register_log_path(self.job_id, self.name)
 
 
 ### END EXECUTABLE JOB ###

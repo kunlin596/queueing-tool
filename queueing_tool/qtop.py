@@ -9,12 +9,13 @@ Two views:
   new output as it arrives. Arrows / PgUp / PgDn scroll back (following
   pauses), End / G resumes following, Esc / q returns to the list.
 
-Log discovery: jobs write ``q.log/<fullname>.<zero-filled id>`` in the
-directory they were SUBMITTED from (the server never learns that path, and
-the table truncates names to 16 chars), so qtop resolves logs by the unique
-id suffix ``q.log/*.<id>`` under the current working directory — run qtop
-where you run qsub. Press ``f`` in the list to also show finished jobs that
-left a log in ``q.log/`` (newest first, status ``f``).
+Log discovery: every job records its absolute log path in the persistent
+registry ``~/.local/state/queueing-tool/job_logs/<id>`` at submit time (see
+``queueing_tool.job.register_log_path``), so qtop resolves logs from
+anywhere. For jobs submitted before the registry existed it falls back to
+searching ``q.log`` in the cwd and its parents. Press ``f`` in the list to
+also show finished jobs (registry + local ``q.log``, newest first,
+status ``f``).
 """
 
 import argparse
@@ -24,6 +25,8 @@ import os
 import re
 import socket
 from collections import deque
+
+from queueing_tool import job as job_mod
 
 REFRESH_S = 2.0  # job-list poll period
 INPUT_TICK_MS = 200  # curses getch timeout (UI latency + log poll period)
@@ -59,10 +62,58 @@ def fetch_jobs(server_address):
     return rows, None
 
 
+def log_dirs():
+    """Candidate q.log dirs: cwd upward to $HOME (or /), nearest first.
+
+    Jobs write q.log relative to their submit directory; walking up lets
+    qtop run from anywhere inside the project tree.
+    """
+    dirs = []
+    cur = os.getcwd()
+    stop = os.path.expanduser("~")
+    while True:
+        cand = os.path.join(cur, "q.log")
+        if os.path.isdir(cand):
+            dirs.append(cand)
+        parent = os.path.dirname(cur)
+        if cur in (stop, "/") or parent == cur:
+            break
+        cur = parent
+    return dirs
+
+
+def registry_log(job_id):
+    """Look up the job's tracked log path; None if unregistered/missing."""
+    reg = os.path.join(job_mod.LOG_REGISTRY_DIR, f"{int(job_id):07d}")
+    try:
+        with open(reg) as f:
+            path = f.read().strip()
+    except OSError:
+        return None
+    return path if os.path.isfile(path) else None
+
+
+def registry_paths():
+    """All tracked log paths that still exist on disk."""
+    entries = glob.glob(os.path.join(job_mod.LOG_REGISTRY_DIR, "[0-9]*"))
+    paths = []
+    for entry in entries:
+        try:
+            with open(entry) as f:
+                path = f.read().strip()
+        except OSError:
+            continue
+        if os.path.isfile(path):
+            paths.append(path)
+    return paths
+
+
 def finished_logs(limit=FINISHED_SHOWN):
-    """Recent q.log entries as pseudo-rows (status 'f'), newest first."""
-    paths = glob.glob(os.path.join("q.log", "*.[0-9]*"))
-    paths.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+    """Recent finished logs (registry + local q.log) as pseudo-rows."""
+    paths = set(registry_paths())
+    for d in log_dirs():
+        paths.update(glob.glob(os.path.join(d, "*.[0-9]*")))
+    paths = sorted(paths, key=lambda p: os.path.getmtime(p), reverse=True)
     rows = []
     for path in paths[:limit]:
         base = os.path.basename(path)
@@ -84,9 +135,19 @@ def finished_logs(limit=FINISHED_SHOWN):
 
 
 def find_log(job_id):
-    """Resolve q.log/<name>.<id> by the unique zero-filled id suffix."""
-    matches = glob.glob(os.path.join("q.log", f"*.{int(job_id):07d}"))
-    return matches[0] if matches else None
+    """Resolve a job's log: tracked registry first, cwd-walk fallback.
+
+    The fallback (unique id suffix ``q.log/*.<id>`` in the cwd and its
+    parents) only serves jobs submitted before the registry existed.
+    """
+    tracked = registry_log(job_id)
+    if tracked is not None:
+        return tracked
+    for d in log_dirs():
+        matches = glob.glob(os.path.join(d, f"*.{int(job_id):07d}"))
+        if matches:
+            return matches[0]
+    return None
 
 
 class LogTail:
@@ -171,8 +232,8 @@ class QTop:
             self.mode = self.LOG
         else:
             self.error = (
-                f"no q.log/*.{int(row['id']):07d} under {os.getcwd()} "
-                "(run qtop from the submit directory)"
+                f"no q.log/*.{int(row['id']):07d} under {os.getcwd()} or its "
+                "parents (run qtop from inside the submit tree)"
             )
 
     def close_log(self):
@@ -208,7 +269,13 @@ class QTop:
                 attr |= curses.A_BOLD
             _addstr(scr, 4 + i, 0, line, attr)
         if self.error and self.jobs:
-            _addstr(scr, self.scr.getmaxyx()[0] - 1, 0, self.error, curses.A_DIM)
+            _addstr(
+                scr,
+                self.scr.getmaxyx()[0] - 1,
+                0,
+                self.error,
+                curses.A_BOLD | curses.A_REVERSE,
+            )
         scr.refresh()
 
     def draw_log(self):
@@ -262,7 +329,15 @@ class QTop:
             idx = my - 4
             if 0 <= idx < len(self.jobs):
                 self.selected = idx
-                if bstate & (curses.BUTTON1_CLICKED | curses.BUTTON1_DOUBLE_CLICKED):
+                # Terminals/tmux differ in what they deliver for a click:
+                # some report CLICKED, others only PRESSED/RELEASED.
+                click = (
+                    curses.BUTTON1_CLICKED
+                    | curses.BUTTON1_DOUBLE_CLICKED
+                    | curses.BUTTON1_PRESSED
+                    | curses.BUTTON1_RELEASED
+                )
+                if bstate & click:
                     self.open_log(self.jobs[idx])
         return True
 
@@ -293,7 +368,12 @@ class QTop:
     # ------------------------------ loop ------------------------------ #
     def run(self):
         curses.curs_set(0)
-        curses.mousemask(curses.BUTTON1_CLICKED | curses.BUTTON1_DOUBLE_CLICKED)
+        curses.mousemask(
+            curses.BUTTON1_CLICKED
+            | curses.BUTTON1_DOUBLE_CLICKED
+            | curses.BUTTON1_PRESSED
+            | curses.BUTTON1_RELEASED
+        )
         self.scr.timeout(INPUT_TICK_MS)
         import time
 
